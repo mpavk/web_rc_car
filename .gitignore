@@ -1,12 +1,56 @@
-CMakeLists.txt.user
+# Build directories
+/build/
+/out/
+
+# CMake artifacts
+CMakeFiles/
 CMakeCache.txt
-CMakeFiles
-CMakeScripts
-Testing
-Makefile
 cmake_install.cmake
-install_manifest.txt
+Makefile
 compile_commands.json
-CTestTestfile.cmake
-_deps
+
+# CMake Presets user files
+CMakePresets.json.user
 CMakeUserPresets.json
+
+# Executable output
+webrccar
+
+# Object files and libraries
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+
+# Editor and IDE settings
+.vscode/
+.idea/
+*.sublime*
+*.code-workspace
+
+# Zed editor settings
+.zed/
+*.zed
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+.cache/
+# Misc
+*~
+
+# End of .gitignore
