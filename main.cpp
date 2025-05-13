@@ -105,9 +105,9 @@ static void start_pipeline() {
     GError *err = nullptr;
     pipeline = gst_parse_launch(
   "libcamerasrc ! "
-    "video/x-raw,width=160,height=120,framerate=5/1 ! "  // Tiny resolution and very low framerate
+  "video/x-raw,width=320,height=240,framerate=15/1 ! "  // Tiny resolution and very low framerate
   "videoconvert ! "
-  "x264enc tune=zerolatency bitrate=50 speed-preset=ultrafast ! "  // Absolute minimum bitrate and fastest encoding
+  "x264enc tune=zerolatency bitrate=200 speed-preset=ultrafast ! "  // Absolute minimum bitrate and fastest encoding
   "h264parse ! "
   "rtph264pay config-interval=-1 ! "  // Less frequent config packets
   "webrtcbin name=webrtc stun-server=stun://stun.l.google.com:19302",
