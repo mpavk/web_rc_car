@@ -101,15 +101,17 @@ static void start_pipeline() {
     if (pipeline_started) return;
     pipeline_started = true;
 
-    g_print("[LOG] Creating GStreamer pipeline\n");
+    g_print("[LOG] Creating optimized GStreamer pipeline for Pi Zero W\n");
     GError *err = nullptr;
     pipeline = gst_parse_launch(
-      "v4l2src device=/dev/video0 ! "
-      "video/x-raw,width=640,height=480,framerate=30/1 ! "
-      "videoconvert ! queue ! "
-      "vp8enc deadline=1 ! rtpvp8pay ! "
-      "webrtcbin name=webrtc stun-server=stun://stun.l.google.com:19302",
-      &err);
+  "libcamerasrc ! "
+    "video/x-raw,width=160,height=120,framerate=5/1 ! "  // Tiny resolution and very low framerate
+  "videoconvert ! "
+  "x264enc tune=zerolatency bitrate=50 speed-preset=ultrafast ! "  // Absolute minimum bitrate and fastest encoding
+  "h264parse ! "
+  "rtph264pay config-interval=-1 ! "  // Less frequent config packets
+  "webrtcbin name=webrtc stun-server=stun://stun.l.google.com:19302",
+  &err);
     if (!pipeline) {
       g_printerr("[ERROR] Failed to create pipeline: %s\n", err->message);
       g_error_free(err);
