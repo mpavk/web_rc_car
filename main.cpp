@@ -10,6 +10,7 @@ static GMainLoop               *loop;
 static SoupWebsocketConnection *ws_conn = nullptr;
 static GstElement              *pipeline = nullptr, *webrtc = nullptr;
 static bool                     pipeline_started = false;
+static gchar                   *device_id = nullptr;  // Identifier for this device
 
 // Відправка JSON через WebSocket
 static void send_json(JsonBuilder *b) {
@@ -53,6 +54,9 @@ static void on_negotiation_needed(GstElement *webrtc_elem, gpointer) {
         g_print("[LOG] Building JSON for SDP offer\n");
         JsonBuilder *b = json_builder_new();
         json_builder_begin_object(b);
+          // Include device identifier
+          json_builder_set_member_name(b, "device");
+          json_builder_add_string_value(b, device_id);
           json_builder_set_member_name(b, "sdp");
           gchar *sdp_text = gst_sdp_message_as_text(offer->sdp);
           json_builder_add_string_value(b, sdp_text);
@@ -80,13 +84,15 @@ static void on_negotiation_needed(GstElement *webrtc_elem, gpointer) {
 // ICE-candidate
 static void on_ice_candidate(GstElement*, guint mline, gchar *cand, gpointer) {
     if (!cand || *cand == '\0') {
-      // пустий кандидат завершує збір
       g_print("[LOG] Empty candidate, end of candidates\n");
       return;
     }
     g_print("[LOG] on-ice-candidate: mline=%u candidate=%s\n", mline, cand);
     JsonBuilder *b = json_builder_new();
     json_builder_begin_object(b);
+      // Include device identifier
+      json_builder_set_member_name(b, "device");
+      json_builder_add_string_value(b, device_id);
       json_builder_set_member_name(b, "candidate");
       json_builder_add_string_value(b, cand);
       json_builder_set_member_name(b, "sdpMLineIndex");
@@ -104,14 +110,14 @@ static void start_pipeline() {
     g_print("[LOG] Creating optimized GStreamer pipeline for Pi Zero W\n");
     GError *err = nullptr;
     pipeline = gst_parse_launch(
-  "libcamerasrc ! "
-  "video/x-raw,width=320,height=240,framerate=15/1 ! "  // Tiny resolution and very low framerate
-  "videoconvert ! "
-  "x264enc tune=zerolatency bitrate=200 speed-preset=ultrafast ! "  // Absolute minimum bitrate and fastest encoding
-  "h264parse ! "
-  "rtph264pay config-interval=-1 ! "  // Less frequent config packets
-  "webrtcbin name=webrtc stun-server=stun://stun.l.google.com:19302",
-  &err);
+      "libcamerasrc ! "
+      "video/x-raw,width=320,height=240,framerate=15/1 ! "  // Tiny resolution and very low framerate
+      "videoconvert ! "
+      "x264enc tune=zerolatency bitrate=200 speed-preset=ultrafast ! "  // Absolute minimum bitrate and fastest encoding
+      "h264parse ! "
+      "rtph264pay config-interval=-1 pt=96 ! "  // Less frequent config packets
+      "webrtcbin name=webrtc stun-server=stun://%s:%s/ws latency=10",
+      &err);
     if (!pipeline) {
       g_printerr("[ERROR] Failed to create pipeline: %s\n", err->message);
       g_error_free(err);
@@ -122,27 +128,19 @@ static void start_pipeline() {
     g_print("[LOG] Setting up bus watch\n");
     GstBus *bus = gst_element_get_bus(pipeline);
     gst_bus_add_signal_watch(bus);
-    g_signal_connect(bus, "message::error", G_CALLBACK(+[](
-        GstBus *bus, GstMessage *msg, gpointer){
-      GError *e = nullptr;
-      gchar  *dbg = nullptr;
+    g_signal_connect(bus, "message::error", G_CALLBACK(+[](GstBus *bus, GstMessage *msg, gpointer) {
+      GError *e = nullptr; gchar *dbg = nullptr;
       gst_message_parse_error(msg, &e, &dbg);
       g_printerr("[ERROR] GstError from %s: %s\nDebug: %s\n",
-                 GST_OBJECT_NAME(msg->src),
-                 e->message, dbg);
-      g_error_free(e);
-      g_free(dbg);
+                 GST_OBJECT_NAME(msg->src), e->message, dbg);
+      g_error_free(e); g_free(dbg);
     }), nullptr);
-    g_signal_connect(bus, "message::warning", G_CALLBACK(+[](
-        GstBus *bus, GstMessage *msg, gpointer){
-      GError *e = nullptr;
-      gchar  *dbg = nullptr;
+    g_signal_connect(bus, "message::warning", G_CALLBACK(+[](GstBus *bus, GstMessage *msg, gpointer) {
+      GError *e = nullptr; gchar *dbg = nullptr;
       gst_message_parse_warning(msg, &e, &dbg);
       g_printerr("[WARN] GstWarning from %s: %s\nDebug: %s\n",
-                 GST_OBJECT_NAME(msg->src),
-                 e->message, dbg);
-      g_error_free(e);
-      g_free(dbg);
+                 GST_OBJECT_NAME(msg->src), e->message, dbg);
+      g_error_free(e); g_free(dbg);
     }), nullptr);
     gst_object_unref(bus);
 
@@ -174,13 +172,23 @@ static void on_ws_message(SoupWebsocketConnection*, SoupWebsocketDataType, GByte
     json_parser_load_from_data(parser, data, size, NULL);
     JsonObject *obj = json_node_get_object(json_parser_get_root(parser));
 
-    // 1) Браузер говорить "готовий" → старт пайплайну
+    // Filter by device_id
+    if (json_object_has_member(obj, "device")) {
+      const char *msg_dev = json_object_get_string_member(obj, "device");
+      if (g_strcmp0(msg_dev, device_id) != 0) {
+        g_print("[LOG] Ignoring message for device '%s'\n", msg_dev);
+        g_object_unref(parser);
+        return;
+      }
+    }
+
+    // 1) Browser says "ready" → start pipeline
     if (json_object_has_member(obj, "action") &&
         g_strcmp0(json_object_get_string_member(obj, "action"), "ready") == 0) {
       g_print("[LOG] Received READY from browser — starting pipeline\n");
       start_pipeline();
     }
-    // 2) Вхідний SDP-answer
+    // 2) Incoming SDP-answer
     else if (json_object_has_member(obj, "type") &&
              g_strcmp0(json_object_get_string_member(obj, "type"), "answer") == 0) {
         g_print("[LOG] Handling incoming SDP answer\n");
@@ -197,7 +205,7 @@ static void on_ws_message(SoupWebsocketConnection*, SoupWebsocketDataType, GByte
                               desc, NULL);
         gst_webrtc_session_description_free(desc);
     }
-    // 3) Вхідний ICE-кандидат
+    // 3) Incoming ICE-candidate
     else if (json_object_has_member(obj, "candidate")) {
         g_print("[LOG] Handling incoming ICE candidate\n");
         const gchar *cand = json_object_get_string_member(obj, "candidate");
@@ -211,7 +219,7 @@ static void on_ws_message(SoupWebsocketConnection*, SoupWebsocketDataType, GByte
     g_object_unref(parser);
 }
 
-// Колбек завершення WS-підключення
+// Callback when WebSocket connect completes
 static void
 on_ws_connected(GObject     *source,
                 GAsyncResult *res,
@@ -229,24 +237,37 @@ on_ws_connected(GObject     *source,
         return;
     }
     g_print("[LOG] WebSocket connected successfully\n");
+
+    // Відправляємо ready з device_id одразу після підключення
+    {
+      JsonBuilder *b = json_builder_new();
+      json_builder_begin_object(b);
+        json_builder_set_member_name(b, "action");
+        json_builder_add_string_value(b, "ready");
+        json_builder_set_member_name(b, "device");
+        json_builder_add_string_value(b, device_id);
+      json_builder_end_object(b);
+      send_json(b);
+      g_object_unref(b);
+    }
+
+    // Підключаємо обробник вхідних повідомлень
     g_signal_connect(ws_conn, "message",
                      G_CALLBACK(on_ws_message), nullptr);
-
-    // Не створюємо pipeline одразу — чекаємо повідомлення {"action":"ready"}
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     gst_init(&argc, &argv);
     loop = g_main_loop_new(NULL, FALSE);
 
-    if (argc != 3) {
-        g_printerr("Usage: %s <signaling-server-ip> <port>\n", argv[0]);
+    if (argc != 4) {
+        g_printerr("Usage: %s <signaling-server-ip> <port> <device-id>\n", argv[0]);
         return 1;
     }
     const char *sig_ip   = argv[1];
     const char *sig_port = argv[2];
+    device_id            = g_strdup(argv[3]);
 
-    // будуємо рядок WS-адреси та виводимо його
     gchar *ws_address = g_strdup_printf("ws://%s:%s/ws", sig_ip, sig_port);
     g_print("[LOG] Connecting to signaling server %s\n", ws_address);
 
@@ -260,10 +281,10 @@ int main(int argc, char *argv[]) {
     soup_session_websocket_connect_async(
         session,
         msg,
-        nullptr,
-        nullptr,
+        NULL,
+        NULL,
         G_PRIORITY_DEFAULT,
-        nullptr,
+        NULL,
         on_ws_connected,
         session
     );
@@ -273,9 +294,10 @@ int main(int argc, char *argv[]) {
 
     g_print("[LOG] Cleaning up\n");
     if (pipeline) {
-        gst_element_set_state(pipeline, GST_STATE_NULL);
-        gst_object_unref(pipeline);
+      gst_element_set_state(pipeline, GST_STATE_NULL);
+      gst_object_unref(pipeline);
     }
+    g_free(device_id);
     g_main_loop_unref(loop);
     return 0;
 }
