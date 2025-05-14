@@ -239,22 +239,33 @@ int main(int argc, char *argv[]) {
     gst_init(&argc, &argv);
     loop = g_main_loop_new(NULL, FALSE);
 
-    g_print("[LOG] Starting application\n");
+    if (argc != 3) {
+        g_printerr("Usage: %s <signaling-server-ip> <port>\n", argv[0]);
+        return 1;
+    }
+    const char *sig_ip   = argv[1];
+    const char *sig_port = argv[2];
+
+    // будуємо рядок WS-адреси та виводимо його
+    gchar *ws_address = g_strdup_printf("ws://%s:%s/ws", sig_ip, sig_port);
+    g_print("[LOG] Connecting to signaling server %s\n", ws_address);
+
     SoupSession *session = soup_session_new();
     SoupMessage *msg = soup_message_new(
       SOUP_METHOD_GET,
-      "ws://93.171.152.5:8443/ws"
+      ws_address
     );
-    g_print("[LOG] Connecting to signaling server ws://93.171.152.5:8443/ws\n");
+    g_free(ws_address);
+
     soup_session_websocket_connect_async(
-        session,             // SoupSession*
-        msg,                 // SoupMessage*
-        nullptr,             // origin
-        nullptr,             // protocols
-        G_PRIORITY_DEFAULT,  // io_priority
-        nullptr,             // cancellable
-        on_ws_connected,     // callback
-        session              // user_data
+        session,
+        msg,
+        nullptr,
+        nullptr,
+        G_PRIORITY_DEFAULT,
+        nullptr,
+        on_ws_connected,
+        session
     );
 
     g_print("[LOG] Entering main loop\n");
@@ -262,8 +273,8 @@ int main(int argc, char *argv[]) {
 
     g_print("[LOG] Cleaning up\n");
     if (pipeline) {
-      gst_element_set_state(pipeline, GST_STATE_NULL);
-      gst_object_unref(pipeline);
+        gst_element_set_state(pipeline, GST_STATE_NULL);
+        gst_object_unref(pipeline);
     }
     g_main_loop_unref(loop);
     return 0;
