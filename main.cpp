@@ -5,12 +5,48 @@
 #include <libsoup/soup.h>
 #include <libsoup/soup-websocket.h>
 #include <json-glib/json-glib.h>
+// #include <wiringPi.h>  // For GPIO control
+
+// GPIO pin definitions for motor control
+#define MOTOR_LEFT_FWD  23  // GPIO pins for left motor forward
+#define MOTOR_LEFT_REV  24  // GPIO pins for left motor backward
+#define MOTOR_RIGHT_FWD 25  // GPIO pins for right motor forward
+#define MOTOR_RIGHT_REV 26  // GPIO pins for right motor backward
 
 static GMainLoop               *loop;
 static SoupWebsocketConnection *ws_conn = nullptr;
 static GstElement              *pipeline = nullptr, *webrtc = nullptr;
 static bool                     pipeline_started = false;
 static gchar                   *device_id = nullptr;  // Identifier for this device
+
+// Initialize GPIO for motor control
+static void init_motor_control() {
+    g_print("[TEST] Simulating motor control initialization\n");
+}
+
+// Імітація виконання команд
+static void control_vehicle(const gchar *command) {
+    g_print("[TEST] Vehicle command received: %s\n", command);
+
+    if (g_strcmp0(command, "forward") == 0) {
+        g_print("[ACTION] Simulate: Moving forward\n");
+    }
+    else if (g_strcmp0(command, "backward") == 0) {
+        g_print("[ACTION] Simulate: Moving backward\n");
+    }
+    else if (g_strcmp0(command, "left") == 0) {
+        g_print("[ACTION] Simulate: Turning left\n");
+    }
+    else if (g_strcmp0(command, "right") == 0) {
+        g_print("[ACTION] Simulate: Turning right\n");
+    }
+    else if (g_strcmp0(command, "stop") == 0) {
+        g_print("[ACTION] Simulate: Stopping\n");
+    }
+    else {
+        g_print("[WARN] Unknown simulated command: %s\n", command);
+    }
+}
 
 // Відправка JSON через WebSocket
 static void send_json(JsonBuilder *b) {
@@ -183,10 +219,19 @@ static void on_ws_message(SoupWebsocketConnection*, SoupWebsocketDataType, GByte
     }
 
     // 1) Browser says "ready" → start pipeline
-    if (json_object_has_member(obj, "action") &&
-        g_strcmp0(json_object_get_string_member(obj, "action"), "ready") == 0) {
-      g_print("[LOG] Received READY from browser — starting pipeline\n");
-      start_pipeline();
+    if (json_object_has_member(obj, "action")) {
+      const gchar *action = json_object_get_string_member(obj, "action");
+
+      if (g_strcmp0(action, "ready") == 0) {
+        g_print("[LOG] Received READY from browser — starting pipeline\n");
+        start_pipeline();
+      }
+      // Vehicle control commands
+      else if (g_strcmp0(action, "control") == 0 && json_object_has_member(obj, "command")) {
+        const gchar *command = json_object_get_string_member(obj, "command");
+        g_print("[LOG] Received vehicle control command: %s\n", command);
+        control_vehicle(command);
+      }
     }
     // 2) Incoming SDP-answer
     else if (json_object_has_member(obj, "type") &&
@@ -267,6 +312,9 @@ int main(int argc, char **argv) {
     const char *sig_ip   = argv[1];
     const char *sig_port = argv[2];
     device_id            = g_strdup(argv[3]);
+
+    // Initialize motor control
+    init_motor_control();
 
     gchar *ws_address = g_strdup_printf("ws://%s:%s/ws", sig_ip, sig_port);
     g_print("[LOG] Connecting to signaling server %s\n", ws_address);
