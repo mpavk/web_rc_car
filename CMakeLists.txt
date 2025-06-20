@@ -23,6 +23,7 @@ pkg_check_modules(GST REQUIRED
 pkg_check_modules(GLIB REQUIRED
   glib-2.0
   gobject-2.0
+  gio-2.0
 )
 
 # libsoup 3.x для WebSocket signaling
