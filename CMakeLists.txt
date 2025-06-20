@@ -1,67 +1,79 @@
 cmake_minimum_required(VERSION 3.10)
-project(webrccar VERSION 0.1.0 LANGUAGES C CXX)
+project(webrccar VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_BUILD_TYPE Debug)
 
-# Use C++20 and unstable GStreamer API
+# Використовуємо C++20 і unstable GStreamer API
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-add_definitions(-DGST_USE_UNSTABLE_API)
+add_compile_definitions(GST_USE_UNSTABLE_API)
 
-# Require pkg-config
+# Вимагаємо pkg-config
 find_package(PkgConfig REQUIRED)
 
-# GStreamer core, WebRTC and SDP modules
+# GStreamer core, WebRTC і SDP модулі
 pkg_check_modules(GST REQUIRED
   gstreamer-1.0
   gstreamer-webrtc-1.0
   gstreamer-sdp-1.0
 )
 
-# GLib for core facilities
+# GLib для базових можливостей
 pkg_check_modules(GLIB REQUIRED
   glib-2.0
   gobject-2.0
 )
 
-# Use libsoup 3.x for WebSocket signalling (must match GStreamer plugins)
+# libsoup 3.x для WebSocket signaling
 pkg_check_modules(SOUP REQUIRED
   libsoup-3.0
 )
 
-# JSON-GLib for JSON handling
+# JSON-GLib для роботи з JSON
 pkg_check_modules(JSONGLIB REQUIRED
   json-glib-1.0
 )
 
-# Include directories
-include_directories(
+# libgpiod для роботи з GPIO
+pkg_check_modules(LIBGPIOD REQUIRED
+  libgpiod
+)
+
+# pigpio для роботи з GPIO
+# pkg_check_modules(PIGPIO REQUIRED pigpio)
+
+# Список модулів-джерел
+set(SOURCES
+  main.cpp
+  gpio_control.cpp
+  pwm_control.cpp
+  webrtc_pipeline.cpp
+)
+
+# Виконуваний файл
+add_executable(webrccar ${SOURCES})
+
+# Додаткові include папки
+target_include_directories(webrccar PRIVATE
   ${GST_INCLUDE_DIRS}
   ${GLIB_INCLUDE_DIRS}
   ${SOUP_INCLUDE_DIRS}
   ${JSONGLIB_INCLUDE_DIRS}
+  ${LIBGPIOD_INCLUDE_DIRS}
 )
 
-# Link directories
-link_directories(
-  ${GST_LIBRARY_DIRS}
-  ${GLIB_LIBRARY_DIRS}
-  ${SOUP_LIBRARY_DIRS}
-  ${JSONGLIB_LIBRARY_DIRS}
-)
-
-# Executable target
-add_executable(webrccar main.cpp)
-
-target_link_libraries(webrccar
-  ${GST_LIBRARIES} ${GST_EXTERNAL_LIBRARIES}
+# Лінкування з бібліотеками
+target_link_libraries(webrccar PRIVATE
+  ${GST_LIBRARIES}
   ${GLIB_LIBRARIES}
   ${SOUP_LIBRARIES}
   ${JSONGLIB_LIBRARIES}
+  ${LIBGPIOD_LIBRARIES}
+  pigpio
 )
 
-# Enable CTest and packaging
+# Enable testing and packaging
 include(CTest)
 enable_testing()
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
