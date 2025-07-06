@@ -89,41 +89,50 @@ void control_vehicle(const char *direction, const char *turn, int speed_percent)
         return;
     }
 
-    gboolean forward  = direction && std::strcmp(direction, "forward")  == 0;
-    gboolean backward = direction && std::strcmp(direction, "backward") == 0;
-    gboolean left     = turn      && std::strcmp(turn,      "left")     == 0;
-    gboolean right    = turn      && std::strcmp(turn,      "right")    == 0;
+    // --- Нова, надійна логіка ---
 
-    g_print("[LOG] control_vehicle: direction=%s, turn=%s, speed=%d\n",
-            forward ? "forward" : (backward ? "backward" : "none"),
-            left    ? "left"    : (right    ? "right"    : "none"),
-            speed_percent);
+    // 1. Визначаємо, чи є команди на рух
+    bool is_forward  = direction && std::strcmp(direction, "forward")  == 0;
+    bool is_backward = direction && std::strcmp(direction, "backward") == 0;
+    bool is_left     = turn      && std::strcmp(turn,      "left")      == 0;
+    bool is_right    = turn      && std::strcmp(turn,      "right")     == 0;
 
-    // Thrust motor (A)
-    if (forward) {
+    // 2. Розраховуємо фінальний стан для кожного мотора
+
+    // Мотор A (вперед/назад)
+    if (is_forward) {
         set_line(line_IN2, 1, "IN2_FWD");
         set_line(line_IN1, 0, "IN1_BACK");
         set_speed_A(speed_percent);
-    } else if (backward) {
+    } else if (is_backward) {
         set_line(line_IN1, 1, "IN1_BACK");
         set_line(line_IN2, 0, "IN2_FWD");
         set_speed_A(speed_percent);
     } else {
+        // Якщо немає команди на рух вперед/назад, зупиняємо мотор А
+        set_line(line_IN1, 0, "IN1_BACK");
+        set_line(line_IN2, 0, "IN2_FWD");
         set_speed_A(0);
     }
 
-    // Steering motor (B) – full speed always on turns
-    if (left) {
+    // Мотор B (вліво/вправо)
+    if (is_left) {
         set_line(line_IN3, 1, "IN3_LEFT");
         set_line(line_IN4, 0, "IN4_RIGHT");
-        set_speed_B(100);
-    } else if (right) {
+        set_speed_B(100); // Поворот завжди на повній швидкості
+    } else if (is_right) {
         set_line(line_IN4, 1, "IN4_RIGHT");
         set_line(line_IN3, 0, "IN3_LEFT");
         set_speed_B(100);
     } else {
+        // Якщо немає команди на поворот, зупиняємо мотор B
+        set_line(line_IN3, 0, "IN3_LEFT");
+        set_line(line_IN4, 0, "IN4_RIGHT");
         set_speed_B(0);
     }
 
-    g_print("[LOG] control_vehicle: Commands applied\n");
+    g_print("[LOG] control_vehicle: Fwd:%d, Bwd:%d, Left:%d, Right:%d -> SpeedA:%d, SpeedB:%d\n",
+            is_forward, is_backward, is_left, is_right,
+            (is_forward || is_backward) ? speed_percent : 0,
+            (is_left || is_right) ? 100 : 0);
 }
