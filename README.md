@@ -49,7 +49,7 @@ The system consists of three main components:
 
 1.  **Clone the Repository:**
     ```bash
-    git clone [https://github.com/mpavk/web_rc_car.git](https://github.com/mpavk/web_rc_car.git)
+    git clone https://github.com/mpavk/web_rc_car.git
     cd web_rc_car
     ```
 
@@ -64,7 +64,7 @@ The system consists of three main components:
 
     # Note: libwebrtc installation can be complex.
     # You may need to build it from source or find a pre-compiled version for ARM.
-    # (This is a placeholder for detailed libwebrtc setup instructions)
+
     ```
 
 3.  **Build the Project:**
