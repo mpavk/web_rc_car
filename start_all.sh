@@ -28,5 +28,5 @@ else
   exit 1
 fi
 
-"$SCRIPT_DIR/build/webrccar" 93.171.152.5 8443 vid
+"$SCRIPT_DIR/build/webrccar" ip port vid
 
