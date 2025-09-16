@@ -8,8 +8,6 @@ The web client for controlling the car is in a separate repository: **[web_rc_ca
 
 ---
 
-
-
 ### 🚀 Key Features
 
 * **Real-Time Video Streaming:** Low-latency, high-framerate video feed directly in your browser using **WebRTC**.
